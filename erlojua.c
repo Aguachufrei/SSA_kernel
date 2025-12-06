@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <unistd.h>
 #include "scheduler.h"
 #include "erlojua.h"
 #define MAIZTASUNA 1
@@ -13,8 +14,9 @@ pthread_cond_t cond1 = PTHREAD_COND_INITIALIZER;
 pthread_cond_t cond2 = PTHREAD_COND_INITIALIZER;
 int tmpCount = 3;
 int done = 0;
+int ssa_time = 1;
 
-void *erlojua(){
+void *erlojua(void *args){
 	printf("clock initialized\n");
 	while (1) {
 		pthread_mutex_lock(&mutexC);
@@ -22,8 +24,8 @@ void *erlojua(){
 			
 			pthread_cond_wait(&cond1, &mutexC);
 		}
-		
-		printf("\nclk!!");	
+	    ssa_time++;	
+		printf("\nclk(%d): ",ssa_time);	
 		usleep(300000);
 		done = 0; 
 		pthread_cond_broadcast(&cond2);

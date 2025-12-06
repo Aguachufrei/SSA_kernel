@@ -4,7 +4,7 @@
 sem_t mutexS;
 
 
-void *scheduler() {
+void *scheduler(void *args) {
 	sem_init(&mutexS, 1, 0);
 	while(1) {
 		sem_wait(&mutexS);

@@ -9,7 +9,8 @@ extern pthread_mutex_t mutexC;
 extern pthread_cond_t cond1;
 extern pthread_cond_t cond2;
 extern int tmpCount;
-void *erlojua();
+extern int ssa_time;
+void *erlojua(void *args);
 void *tenporizadorea(void *args);
 struct temp_arg {
     int maiztasuna;

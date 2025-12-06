@@ -3,18 +3,18 @@
 #include <stdlib.h>
 #include <stdio.h>
 struct PCB {
-        int id;
-	int priority;
-	int lastTime;
+    int id;
+    int priority;
+    int lastTime;
 };
 struct prozesu_ilara_node {
-        struct PCB pcb;
-        struct prozesu_ilara_node* next;
+    struct PCB pc;
+    struct prozesu_ilara_node* next;
 };
 struct prozesu_ilara {
-	int prozesu_kantitatea; 
-        struct prozesu_ilara_node* first;
-        struct prozesu_ilara_node* last;
+    int prozesu_kantitatea; 
+    struct prozesu_ilara_node* first;
+    struct prozesu_ilara_node* last;
 };
 extern struct prozesu_ilara running; 
 extern struct prozesu_ilara ready; 
