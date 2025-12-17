@@ -10,4 +10,4 @@ struct CPU {
 	struct PCB ***cores;
 };
 void cpu_inicialize(int coreNum, int hthreadNum);
-#endi
+#endif

@@ -25,4 +25,6 @@ struct PCB prozesu_poll(struct prozesu_ilara *queue);
 void prozesu_push(struct prozesu_ilara *queue, struct PCB *pcb);
 struct prozesu_ilara_node *prozesu_get_next(struct prozesu_ilara_node *nodoa);
 struct PCB *prozesu_destroy_next(struct prozesu_ilara *queue, struct prozesu_ilara_node *nodoa);
+void printqueue(struct prozesu_ilara *q);
+
 #endif

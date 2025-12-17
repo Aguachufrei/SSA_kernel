@@ -20,7 +20,7 @@ int main () {
 	//temps
 	pthread_t* temporizadoreak = calloc(tmpCount, sizeof(pthread_t));	
 	struct temp_arg* argumentuak = calloc(tmpCount, sizeof(struct temp_arg));
-	argumentuak[0].maiztasuna = 5;
+	argumentuak[0].maiztasuna = 6;
 	argumentuak[0].funtzioa = call_scheduler;
 	argumentuak[1].maiztasuna = 10;
 	argumentuak[1].funtzioa = prozesu_add_ready;
