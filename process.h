@@ -29,5 +29,5 @@ void process_push(struct process_queue *queue, struct PCB *pcb);
 struct process_node *process_get_next(struct process_node *nodoa);
 struct PCB *process_destroy_next(struct process_queue *queue, struct process_node *nodoa);
 void process_print(struct process_queue *q);
-
+void process_print_pages(struct PCB *pcb);
 #endif

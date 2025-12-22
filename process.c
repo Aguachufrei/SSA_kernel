@@ -8,9 +8,15 @@ struct process_queue ready = {.process_num = 0, .first = NULL, .last = NULL};
 int current_id = 0;
 pthread_mutex_t ready_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+//////////
+//LOADER//
+//////////
+
 void process_add_ready(){
 	process_add(&ready);
 }
+
+
 void process_add(struct process_queue *queue){
 	printf(" process_add called...");
 	pthread_mutex_lock(&ready_mutex);
@@ -19,6 +25,9 @@ void process_add(struct process_queue *queue){
 	node->pcb.priority = rand()%100;
 	node->pcb.lastTime = ssa_time;
 	node->pcb.page_entry = malloc(PAGE_NUM*sizeof(struct page_entry));
+	for(int i = 0; i < PAGE_NUM; i++){
+		node->pcb.page_entry[i].free=0;
+	}
 	node->next = NULL;
 	current_id++;
 	queue->process_num++;
@@ -33,11 +42,16 @@ void process_add(struct process_queue *queue){
 	pthread_mutex_unlock(&ready_mutex);
 }
 
+/////////
+//QUEUE//
+/////////
+
 struct PCB process_peek(struct process_queue *queue){
 	pthread_mutex_lock(&ready_mutex);
 	return queue->first->pcb;
 	pthread_mutex_unlock(&ready_mutex);
 }
+
 
 struct PCB process_poll(struct process_queue *queue){
 	pthread_mutex_lock(&ready_mutex);
@@ -53,6 +67,7 @@ struct PCB process_poll(struct process_queue *queue){
 	return cpcb;
 }
 
+
 void process_push(struct process_queue *queue, struct PCB *pcb){
 	pthread_mutex_lock(&ready_mutex);
 	struct process_node *node = (struct process_node*) malloc(sizeof(struct process_node));
@@ -67,9 +82,13 @@ void process_push(struct process_queue *queue, struct PCB *pcb){
 	queue->process_num++;
 	pthread_mutex_unlock(&ready_mutex);
 }
+
+
 struct process_node *process_get_next(struct process_node *node){
 	return node->next;
 } 
+
+
 struct PCB *process_destroy_next(struct process_queue *queue, struct process_node *node){
 	pthread_mutex_lock(&ready_mutex);
 	struct PCB *current = &node->next->pcb;
@@ -84,6 +103,31 @@ struct PCB *process_destroy_next(struct process_queue *queue, struct process_nod
 	pthread_mutex_unlock(&ready_mutex);
 	return current;
 }
+
+//////////
+//MEMORY//
+//////////
+
+void process_alloc_multiple(struct PCB *pcb, int num){
+	for(int i = 0; i<num; i++){
+		int page = memory_alloc();
+		pcb->page_entry[i].physical_page = page;
+		pcb->page_entry[i].free = 1;
+	}
+
+}
+
+
+void process_free_multiple(struct PCB pcb){
+	for(int i = 0; i<PAGE_NUM; i++){
+	
+	}
+}
+
+/////////
+//DEBUG//
+/////////
+
 void process_print(struct process_queue *queue){
     printf("Queue @ %p\n", queue);
     printf("count = %d\n", queue->process_num);
@@ -109,3 +153,11 @@ void process_print(struct process_queue *queue){
     }
 }
 
+
+void process_print_pages(struct PCB *pcb){
+	printf("\nprocessing page printing request by process with id %d\n", pcb->id);
+	for( int i = 0; i<PAGE_NUM; i++){{
+		if(!pcb->page_entry[i].free)
+			printf("page %d allocated");
+	}
+}

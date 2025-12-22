@@ -33,11 +33,13 @@ int main () {
 
 
 	//PRUEBAS
+	
 	int p1 = memory_alloc();
 	int p2 = memory_alloc();
 	printf("%d:%d", p1, p2);
 	memory_free(p1);	
-
+	
+	
 	
         pthread_exit(NULL);
         free(stopwatches);
