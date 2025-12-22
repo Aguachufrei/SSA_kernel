@@ -4,7 +4,6 @@
 #include "process.h"
 #include "clock.h"
 #include "cpu.h"
-
 sem_t mutexS;
 
 void *scheduler(void *args) {
@@ -51,8 +50,7 @@ void *scheduler(void *args) {
 		}
 	}
 }
-
-
 void call_scheduler(){
 	sem_post(&mutexS);
 }
+

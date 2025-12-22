@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <pthread.h>
 #include "process.h"
-#include "memory.h" 
 #include "clock.h"
 struct process_queue ready = {.process_num = 0, .first = NULL, .last = NULL};
 int current_id = 0;
@@ -14,11 +13,10 @@ void process_add_ready(){
 void process_add(struct process_queue *queue){
 	printf(" process_add called...");
 	pthread_mutex_lock(&ready_mutex);
-	struct process_node *node = malloc(sizeof(struct process_node));
+	struct process_node *node = (struct process_node*) malloc(sizeof(struct process_node));
 	node->pcb.id = current_id;
 	node->pcb.priority = rand()%100;
 	node->pcb.lastTime = ssa_time;
-	node->pcb.page_entry = malloc(PAGE_NUM*sizeof(struct page_entry));
 	node->next = NULL;
 	current_id++;
 	queue->process_num++;

@@ -1,7 +1,6 @@
 #include <stdio.h> 
 #include <stdlib.h>
 #include <pthread.h>
-#include "memory.h"
 #include "clock.h"
 #include "process.h"
 #include "cpu.h"
@@ -9,7 +8,6 @@
 int main () {
 	
 	cpu_inicialize(4, 2);	
-	meminit();
 	
 	//clock
 	pthread_t clockthread; 
@@ -30,14 +28,6 @@ int main () {
         pthread_create(&stopwatches[0], NULL, stopwatch, &arguments[0]);
         pthread_create(&stopwatches[1], NULL, stopwatch, &arguments[1]);
         pthread_create(&stopwatches[2], NULL, stopwatch, &arguments[2]);
-
-
-	//PRUEBAS
-	int p1 = memory_alloc();
-	int p2 = memory_alloc();
-	printf("%d:%d", p1, p2);
-	memory_free(p1);	
-
 	
         pthread_exit(NULL);
         free(stopwatches);
