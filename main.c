@@ -39,6 +39,7 @@ int main () {
 	printf("%d:%d", p1, p2);
 	memory_free(p1);	
 	
+	process_loader(&ready, "../heracles", 99);
 	
 	
         pthread_exit(NULL);

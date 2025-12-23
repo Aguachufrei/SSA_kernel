@@ -20,7 +20,8 @@ uint32_t memory_alloc();
 void memory_free(uint32_t page);
 uint32_t memory_translate(struct PCB *pcb, uint32_t logic_addr);
 struct page_entry {
-	uint8_t physical_page;
+	uint32_t physical_page;
 	uint8_t free; //1 free; 2 ocupied;
 };
+
 #endif
