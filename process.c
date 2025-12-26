@@ -6,6 +6,7 @@
 #include "memory.h" 
 #include "clock.h"
 struct process_queue ready = {.process_num = 0, .first = NULL, .last = NULL};
+struct process_queue terminated = {.process_num = 0, .first = NULL, .last = NULL};
 int current_id = 0;
 pthread_mutex_t ready_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -25,6 +26,7 @@ void process_add(struct process_queue *queue){
 	node->pcb.id = current_id;
 	node->pcb.priority = rand()%100;
 	node->pcb.lastTime = ssa_time;
+	node->pcb.hasCode = false;
 	node->pcb.page_entry = malloc(PAGE_NUM*sizeof(struct page_entry));
 	for(int i = 0; i < PAGE_NUM; i++){
 		node->pcb.page_entry[i].free=0;
@@ -46,35 +48,52 @@ void process_add(struct process_queue *queue){
 
 void process_loader(struct process_queue *queue, uint8_t *name, int priority){
 	printf("\n_______Loader called_______\n");
-
-	FILE *f = fopen(name, "rb");
+	
+	//open file
+	FILE *f = fopen(name, "r");
 	if(!f){
 		printf("\nFile %s not found\n", name);
 		return;
 	}
+	//Create process
+	struct process_node *node = malloc(sizeof(struct process_node));
+	node->pcb.id = current_id;
+	node->pcb.hasCode = true;
+	if(priority>=100)printf("\nWARNING priority exceeding maximun value.\nValue range [0, 100); Recieved value: %d\n", priority);
+	node->pcb.priority = priority%100;
+	node->pcb.lastTime = ssa_time;
 
+	//first two lines became "pointers"
+	uint8_t buffer[32];
+	if(fgets(buffer, 32, f))pcb.text = (uint32_t)strtoul(line + 6, NULL, 16);
+	if(fgets(buffer, 32, f))pcb.data = (uint32_t)strtoul(line + 6, NULL, 16);
+	pcb.pc = pcb.text+4;
+	pcb.ir = pcb.text;
+
+	//get rest of file length
+	long pos = ftell(f);
 	fseek(f, 0, SEEK_END);
-	long size = ftell(f);
-	rewind(f);
+	long end = ftell(f);
+	fseek(f, pos, SEEK_SET);
+	pos = end_pos - current_pos;
 
+	//get the rest of the file
 	uint8_t *data = malloc((size+1)*sizeof(uint8_t));
 	fread(data, 1, size, f);	
 	data[size] = '\0';
 
-	printf("PROGRAM_DATA: (size %ld)\n", size);
 	//process_print_hex(data, size);
 
-	struct process_node *node = malloc(sizeof(struct process_node));
-	node->pcb.id = current_id;
-	if(priority>=100)printf("\nWARNING priority exceeding maximun value.\nValue range [0, 100); Recieved value: %d\n", priority);
-	node->pcb.priority = priority%100;
-	node->pcb.lastTime = ssa_time;
+	//create the virtual memory
 	node->pcb.page_entry = malloc(PAGE_NUM*sizeof(struct page_entry));
-
-	int page_num = size / PAGE_SIZE;
+	for(int i = 0; i < PAGE_NUM; i++){
+		node->pcb.page_entry[i].free=0;
+	}
+	int page_num = size / PAGE_SIZE +1;
 	printf("%d pages to be allocated", page_num);
+	
+	//alloc and write into memory
 	process_alloc_multiple(&node->pcb, page_num);
-
 	for (int i = 0; i<page_num; i++){
 		uint8_t *data_ptr = data + i * PAGE_SIZE;
 		uint32_t phys_page = node->pcb.page_entry[i].physical_page;
@@ -83,7 +102,19 @@ void process_loader(struct process_queue *queue, uint8_t *name, int priority){
 	} 
 	free(data);
 
+	//push the process into the queue
 	pthread_mutex_lock(&ready_mutex);
+	node->next = NULL;
+	current_id++;
+	queue->process_num++;
+	if (queue->first == NULL){
+		queue->first = node;
+		queue->last = node;
+
+	} else {
+		queue->last->next = node;
+		queue->last = node;
+	}
 	pthread_mutex_unlock(&ready_mutex);
 }
 
@@ -170,6 +201,41 @@ void process_free_multiple(struct PCB *pcb){
 	}
 	pcb->allocated_page_num = 0;
 }
+void process_read(struct PCB *pcb, uint32_t vaddr, uint8_t *buffer, long size){
+	long bytes_processed = 0;
+	uint32_t initial_offset = vaddr%PAGE_SIZE;
+	while(bytes_processed < size){
+		uint32_t vpage = vaddr/PAGE_SIZE;
+		long bytes_to_process=(size-bytes_processed<PAGE_SIZE?size-bytes_processed:PAGE_SIZE)-initial_offset;
+		uint32_t ppage = pcb->page_entry[vpage].physical_page;
+		memcpy(buffer+bytes_processed, &physical_memory[ppage*PAGE_SIZE]+initial_offset, bytes_to_process);
+		initial_offset = 0;
+		bytes_processed += bytes_to_process;
+	}
+}
+void process_write(struct PCB *pcb, uint32_t vaddr, uint8_t *buffer, long size){
+	long bytes_processed = 0;
+	uint32_t initial_offset = vaddr%PAGE_SIZE;
+	while(bytes_processed < size){
+		uint32_t vpage = vaddr/PAGE_SIZE;
+		long bytes_to_process=(size-bytes_processed<PAGE_SIZE?size-bytes_processed:PAGE_SIZE)-initial_offset;
+		uint32_t ppage = pcb->page_entry[vpage].physical_page;
+		memcpy(&physical_memory[ppage*PAGE_SIZE]+initial_offset, buffer+bytes_processed, bytes_to_process);
+		initial_offset = 0;
+		bytes_processed += bytes_to_process;
+	}
+}
+
+/////////////
+//Execution//
+/////////////
+
+void process_execute(struct PCB *pcb){
+	uint8_t buffer = malloc(3*sizeof(uint8_t));
+	process_read(pcb, pcb.pc, buffer, 3)
+	printf("data to execute");
+	printf("%03X\n", buffer);
+}
 
 /////////
 //DEBUG//
@@ -208,8 +274,12 @@ void process_print_pages(struct PCB *pcb){
 			printf("page %d allocated");
 	}
 }
+
+
 void process_print_hex(uint8_t *data, long size){
 	for(int i = 0; i < size; i++){
 		printf("%02X ", data[i]);
 	}
 }
+
+
