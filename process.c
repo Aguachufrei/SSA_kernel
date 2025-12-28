@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "process.h"
 #include "memory.h" 
+#include "cpu.h"
 #include "clock.h"
 struct process_queue ready = {.process_num = 0, .first = NULL, .last = NULL};
 struct process_queue terminated = {.process_num = 0, .first = NULL, .last = NULL};
@@ -65,42 +66,61 @@ void process_loader(struct process_queue *queue, uint8_t *name, int priority){
 
 	//first two lines became "pointers"
 	uint8_t buffer[32];
-	if(fgets(buffer, 32, f))pcb.text = (uint32_t)strtoul(line + 6, NULL, 16);
-	if(fgets(buffer, 32, f))pcb.data = (uint32_t)strtoul(line + 6, NULL, 16);
-	pcb.pc = pcb.text+4;
-	pcb.ir = pcb.text;
+	if(fgets(buffer, 32, f))node->pcb.text = (uint32_t)strtoul(buffer + 6, NULL, 16);
+	if(fgets(buffer, 32, f))node->pcb.data = (uint32_t)strtoul(buffer + 6, NULL, 16);
+	node->pcb.pc = node->pcb.text;
 
 	//get rest of file length
 	long pos = ftell(f);
 	fseek(f, 0, SEEK_END);
 	long end = ftell(f);
 	fseek(f, pos, SEEK_SET);
-	pos = end_pos - current_pos;
+	long size = end - pos;
 
 	//get the rest of the file
-	uint8_t *data = malloc((size+1)*sizeof(uint8_t));
-	fread(data, 1, size, f);	
-	data[size] = '\0';
-
-	//process_print_hex(data, size);
+	uint8_t *text = malloc(size + 1);
+	fread(text, 1, size, f);	
+	text[size] = '\0';
+	//process_print_hex(text, size);
+	
+	//convert from ascii to bin
+	uint8_t *data = malloc(size / 2);
+	long realSize = 0;
+	uint8_t temp = 0;
+	for(int i = 0; i < size; i++){
+		if(text[i] == '\n') continue;
+		if(!temp){
+			temp = text[i];
+			continue;
+		}
+		uint8_t asciiCode[3] = { temp, text[i], '\0'};
+		data[realSize] = strtoul(asciiCode, NULL, 16);
+		temp = 0;
+		realSize++;
+	}
+	size = realSize;
+	process_print_hex(data, size);
 
 	//create the virtual memory
 	node->pcb.page_entry = malloc(PAGE_NUM*sizeof(struct page_entry));
 	for(int i = 0; i < PAGE_NUM; i++){
 		node->pcb.page_entry[i].free=0;
 	}
-	int page_num = size / PAGE_SIZE +1;
+	int page_num = (size + PAGE_SIZE - 1) / PAGE_SIZE;
 	printf("%d pages to be allocated", page_num);
 	
 	//alloc and write into memory
 	process_alloc_multiple(&node->pcb, page_num);
+	uint32_t bytes_left = size;
 	for (int i = 0; i<page_num; i++){
 		uint8_t *data_ptr = data + i * PAGE_SIZE;
 		uint32_t phys_page = node->pcb.page_entry[i].physical_page;
 		uint8_t *phys_ptr = &physical_memory[phys_page * PAGE_SIZE];
-		memcpy(phys_ptr, data_ptr, PAGE_SIZE);	
+		uint32_t bytes_to_copy = (bytes_left<PAGE_SIZE)?bytes_left:PAGE_SIZE;	
+		printf("%p, %d, %p\n", data_ptr, phys_page, phys_ptr);
+		memcpy(phys_ptr, data_ptr, bytes_to_copy);	
+		bytes_left-=bytes_to_copy;
 	} 
-	free(data);
 
 	//push the process into the queue
 	pthread_mutex_lock(&ready_mutex);
@@ -116,6 +136,8 @@ void process_loader(struct process_queue *queue, uint8_t *name, int priority){
 		queue->last = node;
 	}
 	pthread_mutex_unlock(&ready_mutex);
+	free(text);
+	free(data);
 }
 
 /////////
@@ -202,23 +224,25 @@ void process_free_multiple(struct PCB *pcb){
 	pcb->allocated_page_num = 0;
 }
 void process_read(struct PCB *pcb, uint32_t vaddr, uint8_t *buffer, long size){
+	printf("begin read \n");
 	long bytes_processed = 0;
 	uint32_t initial_offset = vaddr%PAGE_SIZE;
 	while(bytes_processed < size){
 		uint32_t vpage = vaddr/PAGE_SIZE;
-		long bytes_to_process=(size-bytes_processed<PAGE_SIZE?size-bytes_processed:PAGE_SIZE)-initial_offset;
+		long bytes_to_process=(size-bytes_processed<PAGE_SIZE?size-bytes_processed:PAGE_SIZE-initial_offset);
 		uint32_t ppage = pcb->page_entry[vpage].physical_page;
 		memcpy(buffer+bytes_processed, &physical_memory[ppage*PAGE_SIZE]+initial_offset, bytes_to_process);
 		initial_offset = 0;
 		bytes_processed += bytes_to_process;
 	}
+	printf("end read \n");
 }
 void process_write(struct PCB *pcb, uint32_t vaddr, uint8_t *buffer, long size){
 	long bytes_processed = 0;
 	uint32_t initial_offset = vaddr%PAGE_SIZE;
 	while(bytes_processed < size){
 		uint32_t vpage = vaddr/PAGE_SIZE;
-		long bytes_to_process=(size-bytes_processed<PAGE_SIZE?size-bytes_processed:PAGE_SIZE)-initial_offset;
+		long bytes_to_process=(size-bytes_processed<PAGE_SIZE?size-bytes_processed:PAGE_SIZE-initial_offset);
 		uint32_t ppage = pcb->page_entry[vpage].physical_page;
 		memcpy(&physical_memory[ppage*PAGE_SIZE]+initial_offset, buffer+bytes_processed, bytes_to_process);
 		initial_offset = 0;
@@ -231,11 +255,46 @@ void process_write(struct PCB *pcb, uint32_t vaddr, uint8_t *buffer, long size){
 /////////////
 
 void process_execute(struct PCB *pcb){
-	uint8_t buffer = malloc(3*sizeof(uint8_t));
-	process_read(pcb, pcb.pc, buffer, 3)
-	printf("data to execute");
-	printf("%03X\n", buffer);
+	uint8_t buffer[4];
+	process_read(pcb, pcb->pc, buffer, 4);
+	pcb->ir = (buffer[0] << 24) | (buffer[1] << 16) | (buffer[2] << 8) | buffer[3];
+	pcb->pc+=4;
+	printf("Data to execute for pid %d\n", pcb->id);
+	printf("%08X\n", pcb->ir);
+	uint8_t instruction = (pcb->ir >> 28) & 0x0F; 
+	printf("INSTRUCTION: %d\n", instruction);
+	switch(instruction){
+
+		case 0:
+			//ld rx vaddr
+		break;
+		case 1:
+			//st rx vaddr
+		break;
+		case 2:
+			//st rx, ry, rz
+		break;
+		case 15:
+			//exit
+		break;
+		default:
+			printf("instruction is unknown\n");
+		break;
+	}
+      	 	
 }
+
+
+void process_instructions(){
+	for(int i = 0; i < cpu.coreNum; i++){
+		for(int j = 0; j < cpu.hthreadNum; j++){
+			if(cpu.cores[i][j]==NULL||cpu.cores[i][j]->hasCode==false)continue;
+			printf("the id of the troubler is: %d\n", cpu.cores[i][j]->id);
+			process_execute(cpu.cores[i][j]);	
+		}
+	}
+}
+
 
 /////////
 //DEBUG//
@@ -249,12 +308,13 @@ void process_print(struct process_queue *queue){
 	struct process_node *current = queue->first;
 	int i = 0;
 	while (current) {
-		printf("[%d] node=%p  id=%d  priority=%d  lastTime=%d  next=%p\n",
+		printf("[%d] node=%p  id=%d  priority=%d  lastTime=%d code=%d next=%p\n",
 				i,
 				current,
 				current->pcb.id,
 				current->pcb.priority,
 				current->pcb.lastTime,
+				current->pcb.hasCode,
 				current->next);
 
 		current = current->next;
