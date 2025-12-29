@@ -21,15 +21,8 @@ void process_add_ready(){
 
 
 void process_add(struct process_queue *queue){
-	printf(" process_add called...");
 	pthread_mutex_lock(&ready_mutex);
-	struct process_node *node = malloc(sizeof(struct process_node));
-	node->pcb.id = current_id;
-	node->pcb.priority = rand()%100;
-	node->pcb.lastTime = ssa_time;
-	node->pcb.hasCode = false;
-	node->pcb.page_entry = malloc(PAGE_NUM*sizeof(struct page_entry));
-	for(int i = 0; i < PAGE_NUM; i++){
+	struct process_node *node = malloc(sizeof(struct process_node)); node->pcb.id = current_id; node->pcb.priority = rand()%100; node->pcb.lastTime = ssa_time; node->pcb.hasCode = false; node->pcb.page_entry = malloc(PAGE_NUM*sizeof(struct page_entry)); for(int i = 0; i < PAGE_NUM; i++){
 		node->pcb.page_entry[i].free=0;
 	}
 	node->next = NULL;
@@ -48,8 +41,6 @@ void process_add(struct process_queue *queue){
 
 
 void process_loader(struct process_queue *queue, uint8_t *name, int priority){
-	printf("\n_______Loader called_______\n");
-	
 	//open file
 	FILE *f = fopen(name, "r");
 	if(!f){
@@ -76,12 +67,12 @@ void process_loader(struct process_queue *queue, uint8_t *name, int priority){
 	long end = ftell(f);
 	fseek(f, pos, SEEK_SET);
 	long size = end - pos;
+	node->pcb.end = end;
 
 	//get the rest of the file
 	uint8_t *text = malloc(size + 1);
 	fread(text, 1, size, f);	
 	text[size] = '\0';
-	//process_print_hex(text, size);
 	
 	//convert from ascii to bin
 	uint8_t *data = malloc(size / 2);
@@ -107,7 +98,6 @@ void process_loader(struct process_queue *queue, uint8_t *name, int priority){
 		node->pcb.page_entry[i].free=0;
 	}
 	int page_num = (size + PAGE_SIZE - 1) / PAGE_SIZE;
-	printf("%d pages to be allocated", page_num);
 	
 	//alloc and write into memory
 	process_alloc_multiple(&node->pcb, page_num);
@@ -117,7 +107,6 @@ void process_loader(struct process_queue *queue, uint8_t *name, int priority){
 		uint32_t phys_page = node->pcb.page_entry[i].physical_page;
 		uint8_t *phys_ptr = &physical_memory[phys_page * PAGE_SIZE];
 		uint32_t bytes_to_copy = (bytes_left<PAGE_SIZE)?bytes_left:PAGE_SIZE;	
-		printf("%p, %d, %p\n", data_ptr, phys_page, phys_ptr);
 		memcpy(phys_ptr, data_ptr, bytes_to_copy);	
 		bytes_left-=bytes_to_copy;
 	} 
@@ -224,7 +213,6 @@ void process_free_multiple(struct PCB *pcb){
 	pcb->allocated_page_num = 0;
 }
 void process_read(struct PCB *pcb, uint32_t vaddr, uint8_t *buffer, long size){
-	printf("begin read \n");
 	long bytes_processed = 0;
 	uint32_t initial_offset = vaddr%PAGE_SIZE;
 	while(bytes_processed < size){
@@ -235,7 +223,6 @@ void process_read(struct PCB *pcb, uint32_t vaddr, uint8_t *buffer, long size){
 		initial_offset = 0;
 		bytes_processed += bytes_to_process;
 	}
-	printf("end read \n");
 }
 void process_write(struct PCB *pcb, uint32_t vaddr, uint8_t *buffer, long size){
 	long bytes_processed = 0;
@@ -263,25 +250,54 @@ void process_execute(struct PCB *pcb){
 	printf("%08X\n", pcb->ir);
 	uint8_t instruction = (pcb->ir >> 28) & 0x0F; 
 	printf("INSTRUCTION: %d\n", instruction);
-	switch(instruction){
 
+	uint8_t rx, ry, rz;
+	uint32_t vaddr;
+
+	switch(instruction){
 		case 0:
-			//ld rx vaddr
+			//ld rx, vaddr
+			rx = pcb->ir>>24 & 0x0F;
+			vaddr = pcb->ir & 0x00FFFFFF; 
+			process_read(pcb, vaddr, buffer, 4);
+			pcb->registers[rx] = (buffer[0] << 24) | (buffer[1] << 16) | (buffer[2] << 8) | buffer[3];
+			printf("ld r%d, %6X\n", rx, vaddr);
 		break;
 		case 1:
 			//st rx vaddr
+			rx = pcb->ir>>24 & 0x0F;
+			vaddr = pcb->ir & 0x00FFFFFF; 
+			buffer[0] = (uint8_t)pcb->registers[rx]>>24;
+			buffer[1] = (uint8_t)pcb->registers[rx]>>16; 
+			buffer[2] = (uint8_t)pcb->registers[rx]>>8;
+			buffer[3] = (uint8_t)pcb->registers[rx]; 
+			process_write(pcb, vaddr, buffer, 4);
+			printf("st r%d, %6X\n", rx, vaddr);
+
 		break;
 		case 2:
-			//st rx, ry, rz
+			//add rx, ry, rz
+			rx = pcb->ir>>24 & 0x0F;
+			ry = pcb->ir>>20 & 0x0F;
+			rz = pcb->ir>>16 & 0x0F;
+			printf("add r%d, r%d, r%d\n", rx, ry ,rz);
+			pcb->registers[rx] = pcb->registers[ry] + pcb->registers[rz]; 
+
 		break;
 		case 15:
 			//exit
+			printf("exit\n");
+			uint8_t *buff = malloc(pcb->end-pcb->data);
+			process_read(pcb, pcb->data, buff, pcb->end-pcb->data);
+			process_print_hex(buff, pcb->end-pcb->data);
+			pcb->hasCode=0;
+			
+			
 		break;
 		default:
 			printf("instruction is unknown\n");
 		break;
 	}
-      	 	
 }
 
 
@@ -289,7 +305,6 @@ void process_instructions(){
 	for(int i = 0; i < cpu.coreNum; i++){
 		for(int j = 0; j < cpu.hthreadNum; j++){
 			if(cpu.cores[i][j]==NULL||cpu.cores[i][j]->hasCode==false)continue;
-			printf("the id of the troubler is: %d\n", cpu.cores[i][j]->id);
 			process_execute(cpu.cores[i][j]);	
 		}
 	}
@@ -332,6 +347,7 @@ void process_print_pages(struct PCB *pcb){
 	for( int i = 0; i<PAGE_NUM; i++){
 		if(!pcb->page_entry[i].free)
 			printf("page %d allocated");
+
 	}
 }
 
@@ -340,6 +356,7 @@ void process_print_hex(uint8_t *data, long size){
 	for(int i = 0; i < size; i++){
 		printf("%02X ", data[i]);
 	}
+	printf("\n");
 }
 
 

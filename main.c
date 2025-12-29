@@ -25,7 +25,7 @@ int main () {
 	arguments[0].frequency = 6;
 	arguments[0].function = call_scheduler;
 	arguments[1].frequency = 10;
-	arguments[1].function = process_add_ready;
+	//arguments[1].function = process_add_ready;
 	arguments[2].frequency = 1;
 	arguments[2].function = process_instructions;
         pthread_create(&stopwatches[0], NULL, stopwatch, &arguments[0]);
@@ -40,7 +40,7 @@ int main () {
 	printf("%d:%d", p1, p2);
 	memory_free(p1);	
 	
-	process_loader(&ready, "../files/prog000.elf", 99);
+	process_loader(&ready, "../files/prog002.elf", 99);
 	
 	
         pthread_exit(NULL);

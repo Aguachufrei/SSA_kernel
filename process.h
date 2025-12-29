@@ -16,6 +16,7 @@ struct PCB {
     int lastTime;
     uint32_t text;
     uint32_t data;
+    uint32_t end;
     struct page_entry *page_entry;
     uint32_t registers[16];
 };

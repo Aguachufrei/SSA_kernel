@@ -11,7 +11,7 @@ void *scheduler(void *args) {
 	sem_init(&mutexS, 1, 0);
 	while(1) {
 		sem_wait(&mutexS);
-		printf(" scheduler called...");
+		//printf(" scheduler called...");
 		//Prozesagailuen dauden aginduak berreskuratu
 		for(int i = 0; i<cpu.coreNum; i++){
 			for(int j = 0; j<cpu.hthreadNum; j++){
@@ -19,7 +19,7 @@ void *scheduler(void *args) {
 				process_push(&ready, cpu.cores[i][j]);
 			}
 		}
-		process_print(&ready);
+		//process_print(&ready);
 		for(int i = 0; i<cpu.coreNum; i++){
 			for(int j = 0; j<cpu.hthreadNum; j++){
 				struct process_node *current = ready.first;
@@ -47,7 +47,7 @@ void *scheduler(void *args) {
 					process_destroy_next(&ready, previousBest);
 				}
 				cpu.cores[i][j]=&best->pcb;
-				process_print(&ready);
+				//process_print(&ready);
 			}
 		}
 	}

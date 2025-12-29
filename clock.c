@@ -24,8 +24,8 @@ void *clk(void *args){
 			pthread_cond_wait(&cond1, &mutexC);
 		}
 		ssa_time++;	
-		printf("\nclk(%d): ",ssa_time);	
-		usleep(300000);
+		//printf("\nclk(%d): ",ssa_time);	
+		//usleep(300000);
 		done = 0; 
 		pthread_cond_broadcast(&cond2);
 		pthread_mutex_unlock(&mutexC);
@@ -41,7 +41,7 @@ void *stopwatch(void *args){
 		done++;
 		if(i==argstruct->frequency){
 			i = 0;
-			printf(" <-- tclk ( %d )",argstruct->frequency);
+			//printf(" <-- tclk ( %d )",argstruct->frequency);
 			if (argstruct->function != NULL) {
 				argstruct->function();
 			}
