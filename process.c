@@ -22,8 +22,15 @@ void process_add_ready(){
 
 void process_add(struct process_queue *queue){
 	pthread_mutex_lock(&ready_mutex);
-	struct process_node *node = malloc(sizeof(struct process_node)); node->pcb.id = current_id; node->pcb.priority = rand()%100; node->pcb.lastTime = ssa_time; node->pcb.hasCode = false; node->pcb.page_entry = malloc(PAGE_NUM*sizeof(struct page_entry)); for(int i = 0; i < PAGE_NUM; i++){
-		node->pcb.page_entry[i].free=0;
+	struct process_node *node = malloc(sizeof(struct process_node));
+	node->pcb = malloc(sizeof(struct PCB));
+	node->pcb->id = current_id;
+	node->pcb->priority = rand()%100;
+	node->pcb->lastTime = se_time;
+	node->pcb->hasCode = false;
+	node->pcb->page_entry = malloc(PAGE_NUM*sizeof(struct page_entry));
+	for(int i = 0; i < PAGE_NUM; i++){
+		node->pcb->page_entry[i].free=0;
 	}
 	node->next = NULL;
 	current_id++;
@@ -47,19 +54,21 @@ void process_loader(struct process_queue *queue, uint8_t *name, int priority){
 		printf("\nFile %s not found\n", name);
 		return;
 	}
+
 	//Create process
 	struct process_node *node = malloc(sizeof(struct process_node));
-	node->pcb.id = current_id;
-	node->pcb.hasCode = true;
+	node->pcb = malloc(sizeof(struct PCB));
+	node->pcb->id = current_id;
+	node->pcb->hasCode = true;
 	if(priority>=100)printf("\nWARNING priority exceeding maximun value.\nValue range [0, 100); Recieved value: %d\n", priority);
-	node->pcb.priority = priority%100;
-	node->pcb.lastTime = ssa_time;
+	node->pcb->priority = priority%100;
+	node->pcb->lastTime = se_time;
 
 	//first two lines became "pointers"
 	uint8_t buffer[32];
-	if(fgets(buffer, 32, f))node->pcb.text = (uint32_t)strtoul(buffer + 6, NULL, 16);
-	if(fgets(buffer, 32, f))node->pcb.data = (uint32_t)strtoul(buffer + 6, NULL, 16);
-	node->pcb.pc = node->pcb.text;
+	if(fgets(buffer, 32, f))node->pcb->text = (uint32_t)strtoul(buffer + 6, NULL, 16);
+	if(fgets(buffer, 32, f))node->pcb->data = (uint32_t)strtoul(buffer + 6, NULL, 16);
+	node->pcb->pc = node->pcb->text;
 
 	//get rest of file length
 	long pos = ftell(f);
@@ -67,13 +76,13 @@ void process_loader(struct process_queue *queue, uint8_t *name, int priority){
 	long end = ftell(f);
 	fseek(f, pos, SEEK_SET);
 	long size = end - pos;
-	node->pcb.end = end;
+	node->pcb->end = end;
 
 	//get the rest of the file
 	uint8_t *text = malloc(size + 1);
 	fread(text, 1, size, f);	
 	text[size] = '\0';
-	
+
 	//convert from ascii to bin
 	uint8_t *data = malloc(size / 2);
 	long realSize = 0;
@@ -93,18 +102,18 @@ void process_loader(struct process_queue *queue, uint8_t *name, int priority){
 	process_print_hex(data, size);
 
 	//create the virtual memory
-	node->pcb.page_entry = malloc(PAGE_NUM*sizeof(struct page_entry));
+	node->pcb->page_entry = malloc(PAGE_NUM*sizeof(struct page_entry));
 	for(int i = 0; i < PAGE_NUM; i++){
-		node->pcb.page_entry[i].free=0;
+		node->pcb->page_entry[i].free=0;
 	}
 	int page_num = (size + PAGE_SIZE - 1) / PAGE_SIZE;
-	
+
 	//alloc and write into memory
-	process_alloc_multiple(&node->pcb, page_num);
+	process_alloc_multiple(node->pcb, page_num);
 	uint32_t bytes_left = size;
 	for (int i = 0; i<page_num; i++){
 		uint8_t *data_ptr = data + i * PAGE_SIZE;
-		uint32_t phys_page = node->pcb.page_entry[i].physical_page;
+		uint32_t phys_page = node->pcb->page_entry[i].physical_page;
 		uint8_t *phys_ptr = &physical_memory[phys_page * PAGE_SIZE];
 		uint32_t bytes_to_copy = (bytes_left<PAGE_SIZE)?bytes_left:PAGE_SIZE;	
 		memcpy(phys_ptr, data_ptr, bytes_to_copy);	
@@ -133,24 +142,28 @@ void process_loader(struct process_queue *queue, uint8_t *name, int priority){
 //QUEUE//
 /////////
 
-struct PCB process_peek(struct process_queue *queue){
-	pthread_mutex_lock(&ready_mutex);
+struct PCB *process_peek(struct process_queue *queue){
 	return queue->first->pcb;
-	pthread_mutex_unlock(&ready_mutex);
 }
 
 
-struct PCB process_poll(struct process_queue *queue){
+struct PCB *process_poll(struct process_queue *queue){
 	pthread_mutex_lock(&ready_mutex);
+
 	if (queue->process_num == 0){
-		struct PCB err = { .id = -1 };
-		return err;
+		printf("ERROR, queue is empty");
 	}
-	struct PCB cpcb = queue->first->pcb;
-	queue->first = queue->first->next;
+
+	struct process_node *node = queue->first;
+	struct PCB *cpcb = node->pcb;
+
+	queue->first = node->next;
 	queue->process_num--;
 	if(queue->first==NULL) queue->last = NULL;
+
 	pthread_mutex_unlock(&ready_mutex);
+
+	free(node);
 	return cpcb;
 }
 
@@ -158,7 +171,7 @@ struct PCB process_poll(struct process_queue *queue){
 void process_push(struct process_queue *queue, struct PCB *pcb){
 	pthread_mutex_lock(&ready_mutex);
 	struct process_node *node = (struct process_node*) malloc(sizeof(struct process_node));
-	node->pcb = *pcb;
+	node->pcb = pcb;
 	node->next = NULL;
 	if(queue->last == NULL){
 		queue->first = node;
@@ -178,16 +191,19 @@ struct process_node *process_get_next(struct process_node *node){
 
 struct PCB *process_destroy_next(struct process_queue *queue, struct process_node *node){
 	pthread_mutex_lock(&ready_mutex);
-	struct PCB *current = &node->next->pcb;
 	if(node->next == NULL){
-		queue->first = NULL;
-		queue->last = NULL;
-	} else {
-		node->next = node->next->next;
+		printf("trying to destroy a NULL process\n");
+		pthread_mutex_unlock(&ready_mutex);
+		return NULL;
 	}
+	struct process_node *target = node->next;
+	struct PCB *current = target->pcb;
+	
+	node->next = target->next;
 	if(node->next==NULL)queue->last = node;
 	queue->process_num--;
 	pthread_mutex_unlock(&ready_mutex);
+	free(target);
 	return current;
 }
 
@@ -216,7 +232,7 @@ void process_read(struct PCB *pcb, uint32_t vaddr, uint8_t *buffer, long size){
 	long bytes_processed = 0;
 	uint32_t initial_offset = vaddr%PAGE_SIZE;
 	while(bytes_processed < size){
-		uint32_t vpage = vaddr/PAGE_SIZE;
+		uint32_t vpage = (vaddr+bytes_processed)/PAGE_SIZE;
 		long bytes_to_process=(size-bytes_processed<PAGE_SIZE?size-bytes_processed:PAGE_SIZE-initial_offset);
 		uint32_t ppage = pcb->page_entry[vpage].physical_page;
 		memcpy(buffer+bytes_processed, &physical_memory[ppage*PAGE_SIZE]+initial_offset, bytes_to_process);
@@ -228,7 +244,7 @@ void process_write(struct PCB *pcb, uint32_t vaddr, uint8_t *buffer, long size){
 	long bytes_processed = 0;
 	uint32_t initial_offset = vaddr%PAGE_SIZE;
 	while(bytes_processed < size){
-		uint32_t vpage = vaddr/PAGE_SIZE;
+		uint32_t vpage = (vaddr+bytes_processed)/PAGE_SIZE;
 		long bytes_to_process=(size-bytes_processed<PAGE_SIZE?size-bytes_processed:PAGE_SIZE-initial_offset);
 		uint32_t ppage = pcb->page_entry[vpage].physical_page;
 		memcpy(&physical_memory[ppage*PAGE_SIZE]+initial_offset, buffer+bytes_processed, bytes_to_process);
@@ -262,19 +278,19 @@ void process_execute(struct PCB *pcb){
 			process_read(pcb, vaddr, buffer, 4);
 			pcb->registers[rx] = (buffer[0] << 24) | (buffer[1] << 16) | (buffer[2] << 8) | buffer[3];
 			printf("ld r%d, %6X\n", rx, vaddr);
-		break;
+			break;
 		case 1:
 			//st rx vaddr
 			rx = pcb->ir>>24 & 0x0F;
 			vaddr = pcb->ir & 0x00FFFFFF; 
-			buffer[0] = (uint8_t)pcb->registers[rx]>>24;
-			buffer[1] = (uint8_t)pcb->registers[rx]>>16; 
-			buffer[2] = (uint8_t)pcb->registers[rx]>>8;
-			buffer[3] = (uint8_t)pcb->registers[rx]; 
+			buffer[0] = (uint8_t)(pcb->registers[rx]>>24);
+			buffer[1] = (uint8_t)(pcb->registers[rx]>>16); 
+			buffer[2] = (uint8_t)(pcb->registers[rx]>>8);
+			buffer[3] = (uint8_t)(pcb->registers[rx]); 
 			process_write(pcb, vaddr, buffer, 4);
 			printf("st r%d, %6X\n", rx, vaddr);
 
-		break;
+			break;
 		case 2:
 			//add rx, ry, rz
 			rx = pcb->ir>>24 & 0x0F;
@@ -283,20 +299,20 @@ void process_execute(struct PCB *pcb){
 			printf("add r%d, r%d, r%d\n", rx, ry ,rz);
 			pcb->registers[rx] = pcb->registers[ry] + pcb->registers[rz]; 
 
-		break;
+			break;
 		case 15:
 			//exit
 			printf("exit\n");
 			uint8_t *buff = malloc(pcb->end-pcb->data);
 			process_read(pcb, pcb->data, buff, pcb->end-pcb->data);
-			process_print_hex(buff, pcb->end-pcb->data);
+			process_print_hex(buff, (pcb->end-pcb->data)/4);
 			pcb->hasCode=0;
-			
-			
-		break;
+
+
+			break;
 		default:
 			printf("instruction is unknown\n");
-		break;
+			break;
 	}
 }
 
@@ -326,16 +342,15 @@ void process_print(struct process_queue *queue){
 		printf("[%d] node=%p  id=%d  priority=%d  lastTime=%d code=%d next=%p\n",
 				i,
 				current,
-				current->pcb.id,
-				current->pcb.priority,
-				current->pcb.lastTime,
-				current->pcb.hasCode,
+				current->pcb->id,
+				current->pcb->priority,
+				current->pcb->lastTime,
+				current->pcb->hasCode,
 				current->next);
 
 		current = current->next;
 		i++;
 	}
-
 	if (i != queue->process_num) {
 		printf("WARNING: counted %d nodes but process_num says %d\n", i, queue->process_num);
 	}

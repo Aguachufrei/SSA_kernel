@@ -21,7 +21,7 @@ struct PCB {
     uint32_t registers[16];
 };
 struct process_node {
-    struct PCB pcb;
+    struct PCB *pcb;
     struct process_node *next;
 };
 struct process_queue {
@@ -37,8 +37,8 @@ extern int current_id;
 void process_add_ready();
 void process_add(struct process_queue *queue);
 void process_loader(struct process_queue *queue, uint8_t *name, int priority);
-struct PCB process_peek(struct process_queue *queue);
-struct PCB process_poll(struct process_queue *queue);
+struct PCB *process_peek(struct process_queue *queue);
+struct PCB *process_poll(struct process_queue *queue);
 void process_push(struct process_queue *queue, struct PCB *pcb);
 struct process_node *process_get_next(struct process_node *nodoa);
 struct PCB *process_destroy_next(struct process_queue *queue, struct process_node *nodoa);

@@ -10,7 +10,16 @@ int main () {
 	
 	cpu_inicialize(4, 2);	
 	meminit();
-	
+	for(int i = 0; i<9; i++){
+		char str1[21];
+		sprintf(str1, "../files/prog00%d.elf", i);
+		process_loader(&ready, str1, 99);
+	}
+	for(int i = 10; i<40; i++){
+		char str1[21];
+		sprintf(str1, "../files/prog0%d.elf", i);
+		process_loader(&ready, str1, 99);
+	}
 	//clock
 	pthread_t clockthread; 
         pthread_create(&clockthread, NULL, clk, NULL);
@@ -40,7 +49,6 @@ int main () {
 	printf("%d:%d", p1, p2);
 	memory_free(p1);	
 	
-	process_loader(&ready, "../files/prog002.elf", 99);
 	
 	
         pthread_exit(NULL);

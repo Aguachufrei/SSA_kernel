@@ -11,7 +11,7 @@ extern pthread_mutex_t mutexC;
 extern pthread_cond_t cond1;
 extern pthread_cond_t cond2;
 extern int tmpCount;
-extern int ssa_time;
+extern int se_time;
 void *clk(void *args);
 void *stopwatch(void *args);
 struct temp_arg {
